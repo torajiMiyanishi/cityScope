@@ -13,4 +13,6 @@ public enum RoleName {
     Poi,
     /** 移動者役割 */
     Tripper,
+    /** 介入者役割 */
+    Player,
 }

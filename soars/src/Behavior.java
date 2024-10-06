@@ -501,19 +501,29 @@ public class Behavior {
     public static class PoiData{
         private String genreCode;
         private String address;
+        private double area;
+        private int absAttractScore;
 
         private List<IndustryType> industryTypes = new ArrayList<>();
         private List<BehaviorType> behaviorTypes = new ArrayList<>();
 
-        public PoiData(String genreCode, String address, String industryRecord, String behaviorRecord){
+        public PoiData(String genreCode, String address, String industryRecord, String behaviorRecord, double area, int absAttractScore) {
             this.genreCode = genreCode;
             this.address = address;
-            for (String industryType: industryRecord.split(",")){
-                industryTypes.add(INDUSTRY_NAME_TO_INDUSTRY_TYPE.get(industryType.replaceAll(" ","")));
+            this.area = area;
+            this.absAttractScore = absAttractScore;
+
+            if (industryRecord != null){
+                for (String industryType: industryRecord.split(",")){
+                    industryTypes.add(INDUSTRY_NAME_TO_INDUSTRY_TYPE.get(industryType.replaceAll(" ","")));
+                }
             }
-            for (String behaviorType: behaviorRecord.split(",")){
-                behaviorTypes.add(ACTIVITY_TO_BEHAVIOR_TYPE.get(behaviorType.replaceAll(" ","")));
+            if (behaviorRecord != null){
+                for (String behaviorType: behaviorRecord.split(",")){
+                    behaviorTypes.add(ACTIVITY_TO_BEHAVIOR_TYPE.get(behaviorType.replaceAll(" ","")));
+                }
             }
+
         }
         // Getterメソッド
         public String getGenreCode() {
@@ -522,6 +532,8 @@ public class Behavior {
         public String getAddress() {
             return address;
         }
+        public double getArea(){ return area; }
+        public int getAbsAttractScore(){ return absAttractScore; }
         public List<IndustryType> getIndustryTypes() {
             return industryTypes;
         }

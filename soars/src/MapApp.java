@@ -1,6 +1,7 @@
 import java.util.*;
 
 import jp.soars.core.TSpot;
+import jp.soars.core.TSpotManager;
 
 /**
  * poi情報の検索条件に基づいたSpotを抽出するクラス
@@ -8,9 +9,9 @@ import jp.soars.core.TSpot;
  */
 public class MapApp {
     /** マスタ類 */
-    public static final Map<String, List<TSpot>> GENRE_CODE_TO_POI_SPOTS = new HashMap<>(); // ジャンルコードとpoi spotの辞書
-    public static final Map<Behavior.BehaviorType, List<TSpot>> BEHAVIOR_TYPE_TO_POI_SPOTS = new HashMap<>(); // 行為ラベルとpoi spotの辞書
-    public static final Map<Behavior.IndustryType, List<TSpot>> INDUSTRY_TYPE_TO_POI_SPOTS = new HashMap<>(); // 産業大分類ラベルとpoi spotの辞書
+    public static Map<String, List<TSpot>> GENRE_CODE_TO_POI_SPOTS = new HashMap<>(); // ジャンルコードとpoi spotの辞書
+    public static Map<Behavior.BehaviorType, List<TSpot>> BEHAVIOR_TYPE_TO_POI_SPOTS = new HashMap<>(); // 行為ラベルとpoi spotの辞書
+    public static Map<Behavior.IndustryType, List<TSpot>> INDUSTRY_TYPE_TO_POI_SPOTS = new HashMap<>(); // 産業大分類ラベルとpoi spotの辞書
 
     /** poiSpotが生成されるごとに，マスタを更新する */
     public static void update(TSpot poiSpot){
@@ -34,7 +35,19 @@ public class MapApp {
         }
     }
 
-    /** Getterメソッドの実装例 */
+    /** poi spotの削除に対応してマスタを再構築する */
+    public static void regenerate(TSpotManager spotManager){
+        // マスタ類をすべて初期化
+        GENRE_CODE_TO_POI_SPOTS = new HashMap<>();
+        BEHAVIOR_TYPE_TO_POI_SPOTS = new HashMap<>();
+        INDUSTRY_TYPE_TO_POI_SPOTS = new HashMap<>();
+        // 再定義
+        for (TSpot poiSpot: spotManager.getSpots(SpotType.Poi)){
+            update(poiSpot);
+        }
+    }
+
+    /** Getterメソッド */
     public static List<TSpot> getSpotsByGenreCode(String genreCode) {
         return GENRE_CODE_TO_POI_SPOTS.getOrDefault(genreCode, Collections.emptyList());
     }

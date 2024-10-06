@@ -1,5 +1,6 @@
 import java.io.*;
 import java.util.*;
+import java.sql.*;
 
 import com.opencsv.CSVReader;
 import com.opencsv.exceptions.CsvException;
@@ -49,12 +50,12 @@ public class Main {
         // *************************************************************************************************************
         long startTime = System.currentTimeMillis(); //実験開始時刻
         String simulationStart  = "0/00:00:00";
-        String simulationEnd    = "2/0:00:00";
+        String simulationEnd    = "1/0:00:00";
         String tick                = "0:01:00";
         String behaviorTick        = "0:15:00"; // 行為決定のティック
         long seed = 10400L; // マスターシード値
-        int noOfPeople =100;
-        List<Enum<?>> stages = List.of(EStage.AgentArriving, Stage.Deactivate, Stage.DecideBehavior, EStage.AgentPlanning, EStage.AgentDeparting, Stage.DeactivateWithCancel);
+        int noOfPeople = 100;
+        List<Enum<?>> stages = List.of(Stage.FetchIntervention, EStage.AgentArriving, Stage.Deactivate, Stage.DecideBehavior, EStage.AgentPlanning, EStage.AgentDeparting, Stage.DeactivateWithCancel);
         Set<Enum<?>> layers = new HashSet<>();
         Collections.addAll(layers, Layer.values());
         Layer defaultLayer = Layer.Geospatial;
@@ -66,9 +67,10 @@ public class Main {
 
         // 行為更新ステージを毎時刻ルールが実行される定期実行ステージとして登録
         builder.setPeriodicallyExecutedStage(Stage.DecideBehavior, simulationStart, behaviorTick);
+        builder.setPeriodicallyExecutedStage(Stage.FetchIntervention, simulationStart, tick);
 
         // warningの表示設定
-        builder.setWarningFlag(false);
+//        builder.setWarningFlag(false);
 
 //        // マスター乱数発生器のシード値設定
 //        long seed = 0L;
@@ -79,7 +81,8 @@ public class Main {
 //        String dirToInput = "C:\\Users\\tora2\\IdeaProjects\\LifeBehavior\\";
         String dirToInput = "C:\\Users\\tora2\\IdeaProjects\\cityScope\\data\\";
         String pathOfPopulationDataFile = dirToInput + "pop\\spdata_"+noOfPeople+".csv"; //合成人口データファイル
-        String pathToPoi = dirToInput + "poi\\zenrin_building.csv"; //日中の活動場所の建物座標データファイル
+        String pathToPoiCsv = dirToInput + "poi\\zenrin_building.csv"; //poiのcsv
+        String pathToPoiSql = dirToInput + "database\\yokosuka_test.db"; // poiのdatabase
         String pathToPbf = dirToInput + "trans\\14100-road.osm.pbf"; //OpenStreetMap用のPBFファイル
         String dirToGtfs = dirToInput + "trans"; //石垣市のGTFSファイルが格納されているディレクトリ
 
@@ -110,10 +113,12 @@ public class Main {
 
 
         // *************************************************************************************************************
-        // 行為間遷移確率を導入
+        // モデル実行に必要な各クラスを初期化
         // *************************************************************************************************************
-
+        // 行為確率を管理するクラス
         Behavior.initialize();
+        // poiを管理するクラス
+        List<TSpot> generatedPois = Poi.initializePoiLocation(spotManager, Layer.Geospatial, pathToPoiSql, pathToPoiCsv);
 
         // *************************************************************************************************************
         // エージェントとスポットを生成
@@ -131,27 +136,12 @@ public class Main {
                 new TRoleOfGisSpot(home, spData.getLatitude(), spData.getLongitude(), String.valueOf(spData.getMeshcode()));
             }
         }
-        // 日中の活動場所スポットの作成
-        List<String[]> records = new ArrayList<>();
-        try (CSVReader reader = new CSVReader(new FileReader(pathToPoi))) {
-            records = reader.readAll();
-            records = records.subList(1,records.size()); // skip header
-        } catch (IOException | CsvException e) {
-            e.printStackTrace();
-        }
-        int noOfPois = records.size();
-        List<TSpot> pois = spotManager.createSpots(SpotType.Poi, noOfPois, Layer.Geospatial); //活動場所スポットの生成
-        for (int i = 0; i < noOfPois; ++i) {
-            TSpot poi = pois.get(i);
-            String[] record = records.get(i);
-            Behavior.PoiData poiData = new Behavior.PoiData(record[0], record[4], record[6],record[7]); // poiData型でpoiの情報を格納
-            new TRoleOfGisSpot(poi, Double.parseDouble(record[2]), Double.parseDouble(record[3]), record[5]); //GISスポットロールを生成して活動場所スポットに登録
-            new RoleOfPoi(poi, poiData); //poiの属性を保持するロール
-            poi.activateRole(RoleName.Poi); // アクティベート
-        }
+        // poi spotの作成
+        // >>>> Poiクラスに移行
+
         // 途中スポットの作成
         TSpotOnTheWayMaker.create(spotManager, spotManager.getSpots(SpotType.Home), SpotType.SpotOnTheWay); //自宅スポットの途中スポット
-        TSpotOnTheWayMaker.create(spotManager, pois, SpotType.SpotOnTheWay); //活動場所スポットの途中スポット
+
         // testのためのスポット
         TSpot testSpot = spotManager.createSpots(SpotType.Test,1,Layer.Test).get(0);
 
@@ -160,6 +150,10 @@ public class Main {
         List<TAgent> persons = agentManager.createAgents(AgentType.Person, noOfPersons); // Personエージェントを生成
         for (int i = 0; i < persons.size(); ++i) {
             TAgent person = persons.get(i); // i番目のエージェントを取り出す．
+            if (i == 0){
+                new RoleOfPlayer(person);
+                person.activateRole(RoleName.Player);
+            }
             SyntheticPopulationData spData = spDatas.get(i); //i番目のエージェントの人工合成データ
             new TRoleOfGisAgent(person,UUID.randomUUID().toString()); //GISエージェント役割を生成してエージェントに割り当てる
             String householdId = spData.getHouseholdId(); //世帯ID
@@ -190,7 +184,7 @@ public class Main {
 
 
         // git-otp-moduleの設定
-        TPersonTripLogger.open(pathOfLogCDir, fileNameHead + personTripLog); //移動ログをオープン
+        TPersonTripLogger.open(pathOfLogCDir, personTripLog); //移動ログをオープン
         TThreadLocalOfOtpRouter.initialize(pathToPbf, dirToGtfs); //OTPルータの初期化
         // *************************************************************************************************************
         // シミュレーションのメインループ
@@ -208,9 +202,10 @@ public class Main {
             // 行為ログ出力
             writeBehaviorLog(behaviorLogPW,ruleExecutor.getCurrentTime(),persons);
             // 位置情報ログ
-            if (ruleExecutor.getCurrentTime().getMinute() == 0){ // 位置情報は一時間に一度書き出す．
-                writeLocationLog(locationPW,ruleExecutor.getCurrentTime(),persons);
-            }
+//            if (ruleExecutor.getCurrentTime().getMinute() == 0){ // 位置情報は一時間に一度書き出す．
+//                writeLocationLog(locationPW,ruleExecutor.getCurrentTime(),persons);
+//            }
+            writeLocationLog(locationPW,ruleExecutor.getCurrentTime(),persons);
 
         }
 
@@ -323,21 +318,9 @@ public class Main {
         // 時刻を変換
         String HHMM = Day.formatTime(currentTime.getHour(),currentTime.getMinute());
         Day.DayType day = Day.getDay(currentTime.getDay());
+
+
         for (TAgent person : persons) { // 各エージェントから残りの情報を取得
-            // PersonId
-            pw.print(person.getName());
-            // Gender
-            RoleOfResident residentRole = (RoleOfResident) person.getRole(RoleName.Resident);
-            Behavior.Gender gender = (residentRole.getSyntheticPopulationData().getSexId().equals(0)) ? Behavior.Gender.MALE: Behavior.Gender.FEMALE;
-            pw.print("," + gender);
-            // Age
-            pw.print("," + residentRole.getSyntheticPopulationData().getAge());
-            // Day
-            pw.print("," + day);
-            // CurrentTime
-            pw.print("," + currentTime);
-            // NttTime
-            pw.print("," + HHMM);
             // LatLon
             Double[] latlon = new Double[2];
             TSpot currentSpot = person.getCurrentSpot();
@@ -346,11 +329,8 @@ public class Main {
                 latlon = tripperRole.getCurrentLatLon();
 
                 if (latlon == null || latlon[0] == null || latlon[1] == null) {
-
-                    System.out.println(tripperRole);
-                    System.out.println(currentSpot);
                     System.err.println("Cannot find current Latitude, Longitude FROM SpotOnTheWay @Main");
-                    System.exit(1);
+//                    System.exit(1);
                 }
             } else if (currentSpot.getType() == SpotType.Home || currentSpot.getType() == SpotType.Poi) { // 地理空間上のスポットの場合
                 TRoleOfGisSpot gisSpotRole = (TRoleOfGisSpot) currentSpot.getRole(jp.soars.modules.gis_otp.role.ERoleName.GisSpot);
@@ -359,11 +339,27 @@ public class Main {
             if (latlon == null || latlon[0] == null || latlon[1] == null) {
                 System.out.println(currentSpot);
                 System.err.println("Cannot find current Latitude, Longitude @Main");
-                System.exit(1);
-            }
+//                System.exit(1);
+            } else {
+                // PersonId
+                pw.print(person.getName());
+                // Gender
+                RoleOfResident residentRole = (RoleOfResident) person.getRole(RoleName.Resident);
+                Behavior.Gender gender = (residentRole.getSyntheticPopulationData().getSexId().equals(0)) ? Behavior.Gender.MALE: Behavior.Gender.FEMALE;
+                pw.print("," + gender);
+                // Age
+                pw.print("," + residentRole.getSyntheticPopulationData().getAge());
+                // Day
+                pw.print("," + day);
+                // CurrentTime
+                pw.print("," + currentTime);
+                // NttTime
+                pw.print("," + HHMM);
+                // LatLon
+                pw.print("," + latlon[0] + "," + latlon[1]);
 
-            pw.print("," + latlon[0] + "," + latlon[1]);
-            pw.println();
+                pw.println();
+            }
         }
         pw.flush();
     }
