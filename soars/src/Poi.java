@@ -13,7 +13,7 @@ import jp.soars.modules.gis_otp.role.TSpotOnTheWayMaker;
 public class Poi {
 
     /** データベースへのパス */
-    private static String fPathToDatabase;
+    public static String fPathToDatabase;
 
 
     /**
@@ -129,7 +129,9 @@ public class Poi {
         String getLastFetchTimestampSQL = "SELECT time_stamp FROM read_progress";
         String getPoiIntervenedUpdatesSQL = "SELECT * FROM poi_intervened";
 
-        String insertReadProgressSQL = "INSERT INTO read_progress (time_stamp) VALUES (?)";
+        // read_progressテーブルにレコードが存在するか確認するSQL文
+        String checkRecordExistsSQL = "SELECT COUNT(*) FROM read_progress";
+        String insertOrUpdateReadProgressSQL;
 
         // SQLite JDBCドライバをロード
         try {
@@ -142,12 +144,12 @@ public class Poi {
         // SQLiteデータベースに接続
         try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + fPathToDatabase)) {
             // 最新のtime_stampをread_progressから取得
-            int lastTimeStampFromReadProgress = 0;
+            long lastTimeStampFromReadProgress = 0;
             try (Statement stmt = conn.createStatement();
                  ResultSet rs = stmt.executeQuery(getLastFetchTimestampSQL)) {
 
                 if (rs.next()) {
-                    lastTimeStampFromReadProgress = rs.getInt("time_stamp");
+                    lastTimeStampFromReadProgress = rs.getLong("time_stamp");
                 }
             }
 
@@ -158,14 +160,14 @@ public class Poi {
             try (PreparedStatement pstmt = conn.prepareStatement(getPoiIntervenedUpdatesSQL)) {
                 // もしtime_stampが取得できた場合にpoi_intervenedのデータを取得
                 if (lastTimeStampFromReadProgress != 0) {
-                    pstmt.setInt(1, lastTimeStampFromReadProgress); // プレースホルダにtime_stampをセット
+                    pstmt.setLong(1, lastTimeStampFromReadProgress); // プレースホルダにtime_stampをセット
                 }
 
-                int lastTimeStampToReadProgress = lastTimeStampFromReadProgress;
+                long lastTimeStampToReadProgress = lastTimeStampFromReadProgress;
                 try (ResultSet rs = pstmt.executeQuery()) {
                     while (rs.next()) {
                         // poi_intervenedの各列の値を取得
-                        int time_stamp = rs.getInt("time_stamp");
+                        long time_stamp = rs.getLong("time_stamp");
                         String poiId = rs.getString("poi_id");
                         String genre = rs.getString("genre");
                         double area = rs.getDouble("area");
@@ -180,6 +182,7 @@ public class Poi {
 
                         boolean needRegenerate = false;
                         if (isGenerated){ // 生成された場合
+                            System.out.println(spotManager.getSpotDB().get(poiId) + " @Poi.java");
                             TSpot generatedSpot = spotManager.createSpot(SpotType.Poi, poiId, Layer.Geospatial);
                             Behavior.PoiData poiData = new Behavior.PoiData(genre, address, industryType, behaviorType, area, absAttractScore);
                             new RoleOfPoi(generatedSpot, poiData, latitude, longitude, meshCode);
@@ -202,15 +205,30 @@ public class Poi {
                         if (time_stamp > lastTimeStampToReadProgress){
                             lastTimeStampToReadProgress = time_stamp;
                         } else {
-                            System.err.println("time_stamp処理のエラー @Poi.java");
+                            System.err.println("time_stamp: " + time_stamp + "lastTimeStampFromReadProgress" + lastTimeStampFromReadProgress + "lastTimeStampToReadProgress" + lastTimeStampToReadProgress + " @Poi.java");
                             System.exit(1);
                         }
                     }
                 }
-                if(lastTimeStampFromReadProgress != lastTimeStampToReadProgress) { // 最終更新時刻が更新されていれば
-                    try(PreparedStatement pstmtRp = conn.prepareStatement(insertReadProgressSQL)){
-                        pstmtRp.setInt(1 ,lastTimeStampToReadProgress);
-                        pstmtRp.executeUpdate();
+
+                if (lastTimeStampFromReadProgress != lastTimeStampToReadProgress) {
+                    try (Statement stmt = conn.createStatement();
+                         ResultSet rs = stmt.executeQuery(checkRecordExistsSQL)) {
+                        rs.next();
+                        boolean recordExists = rs.getInt(1) > 0;
+
+                        if (recordExists) {
+                            // レコードが存在する場合は更新
+                            insertOrUpdateReadProgressSQL = "UPDATE read_progress SET time_stamp = ?";
+                        } else {
+                            // レコードが存在しない場合は挿入
+                            insertOrUpdateReadProgressSQL = "INSERT INTO read_progress (time_stamp) VALUES (?)";
+                        }
+
+                        try (PreparedStatement pstmtRp = conn.prepareStatement(insertOrUpdateReadProgressSQL)) {
+                            pstmtRp.setLong(1, lastTimeStampToReadProgress);
+                            pstmtRp.executeUpdate();
+                        }
                     }
                 }
             }
@@ -219,11 +237,101 @@ public class Poi {
         }
     }
 
-        // test
-//    public static void main(String[] args) {
-//        // CSVファイルとデータベースのパスを指定
-//        String pathToDataBase = "C:/Users/tora2/IdeaProjects/cityScope/data/database/yokosuka_test.db";
-//        String pathToPoiCsv = "C:/Users/tora2/IdeaProjects/cityScope/data/poi/zenrin_building.csv";
-//        initializePoiLocation(pathToDataBase, pathToPoiCsv);
-//    }
+    // test
+    public static void main(String[] args) {
+        fPathToDatabase = "C:/Users/tora2/IdeaProjects/cityScope/data/database/yokosuka_test.db";
+        // query: read_progressから最新のtime_stampを取得
+        String getLastFetchTimestampSQL = "SELECT time_stamp FROM read_progress";
+        String getPoiIntervenedUpdatesSQL = "SELECT * FROM poi_intervened";
+
+        String insertReadProgressSQL = "INSERT INTO read_progress (time_stamp) VALUES (?)";
+
+        // SQLite JDBCドライバをロード
+        try {
+            Class.forName("org.sqlite.JDBC");
+        } catch (ClassNotFoundException e) {
+            e.printStackTrace();
+            return;
+        }
+
+        // SQLiteデータベースに接続
+        try (Connection conn = DriverManager.getConnection("jdbc:sqlite:" + fPathToDatabase)) {
+            // 最新のtime_stampをread_progressから取得
+            long lastTimeStampFromReadProgress = 0;
+            try (Statement stmt = conn.createStatement();
+                 ResultSet rs = stmt.executeQuery(getLastFetchTimestampSQL)) {
+
+                if (rs.next()) {
+                    lastTimeStampFromReadProgress = rs.getInt("time_stamp");
+                }
+            }
+
+            // もしtime_stampが取得できた場合にpoi_intervenedのデータを取得
+            if (lastTimeStampFromReadProgress != 0) {
+                getPoiIntervenedUpdatesSQL += " WHERE time_stamp > ?"; // 最新取得時刻が存在したらWHERE句を追加
+            }
+            try (PreparedStatement pstmt = conn.prepareStatement(getPoiIntervenedUpdatesSQL)) {
+                // もしtime_stampが取得できた場合にpoi_intervenedのデータを取得
+                if (lastTimeStampFromReadProgress != 0) {
+                    pstmt.setLong(1, lastTimeStampFromReadProgress); // プレースホルダにtime_stampをセット
+                }
+
+                long lastTimeStampToReadProgress = lastTimeStampFromReadProgress;
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    while (rs.next()) {
+                        // poi_intervenedの各列の値を取得
+                        long time_stamp = rs.getLong("time_stamp");
+                        String poiId = rs.getString("poi_id");
+                        String genre = rs.getString("genre");
+                        double area = rs.getDouble("area");
+                        double latitude = rs.getDouble("latitude");
+                        double longitude = rs.getDouble("longitude");
+                        String address = rs.getString("address");
+                        String meshCode = rs.getString("mesh_code");
+                        String industryType = rs.getString("industry_type");
+                        String behaviorType = rs.getString("behavior_type");
+                        int absAttractScore = rs.getInt("abs_attract_score");
+                        boolean isGenerated = rs.getInt("is_generated") == 1;
+
+                        boolean needRegenerate = false;
+                        if (isGenerated){ // 生成された場合
+//                            System.out.println(spotManager.getSpotDB().get(poiId) + " @Poi.java");
+//                            TSpot generatedSpot = spotManager.createSpot(SpotType.Poi, poiId, Layer.Geospatial);
+                            Behavior.PoiData poiData = new Behavior.PoiData(genre, address, industryType, behaviorType, area, absAttractScore);
+//                            new RoleOfPoi(generatedSpot, poiData, latitude, longitude, meshCode);
+//                            TSpotOnTheWayMaker.create(spotManager, generatedSpot, SpotType.SpotOnTheWay); // 途中スポットの作成
+                        } else { // 削除された場合
+//                            TSpot deletingSpot = spotManager.getSpotDB().get(poiId);
+                            /**
+                             * ここに，削除対象のスポットにエージェントが存在しない状態を作り出すメソッドが必要
+                             * */
+//                            spotManager.deleteSpot(deletingSpot);
+                            needRegenerate = true;
+                        }
+
+                        // 削除されるpoiがある場合，MapAppのマスタ類を再構成する
+                        if (needRegenerate){
+//                            MapApp.regenerate(spotManager);
+                        }
+
+                        // soars側の認知をカメラモジュールに伝達する
+                        if (time_stamp > lastTimeStampToReadProgress){
+                            lastTimeStampToReadProgress = time_stamp;
+                        } else {
+                            System.err.println("time_stamp:" + time_stamp + " lastTimeStampFromReadProgress:" + lastTimeStampFromReadProgress + " lastTimeStampToReadProgress:" + lastTimeStampToReadProgress + " @Poi.java");
+                            System.exit(1);
+                        }
+                    }
+                }
+                if(lastTimeStampFromReadProgress != lastTimeStampToReadProgress) { // 最終更新時刻が更新されていれば
+                    try(PreparedStatement pstmtRp = conn.prepareStatement(insertReadProgressSQL)){
+                        pstmtRp.setLong(1 ,lastTimeStampToReadProgress);
+                        pstmtRp.executeUpdate();
+                    }
+                }
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+    }
 }
