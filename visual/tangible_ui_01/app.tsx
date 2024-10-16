@@ -3,13 +3,11 @@ import { createRoot } from 'react-dom/client';
 import { Map } from 'react-map-gl/maplibre';
 import { DeckGL } from '@deck.gl/react';
 import { GeoJsonLayer } from '@deck.gl/layers';
-import { LightingEffect, AmbientLight, _SunLight as SunLight } from '@deck.gl/core';
+import { AmbientLight, _SunLight as SunLight } from '@deck.gl/core';
 import * as turf from '@turf/turf';
-import type { Color, Position, PickingInfo, MapViewState } from '@deck.gl/core';
-import type { Feature, Geometry } from 'geojson';
 import './styles.css';
 
-const DATA_URL = 'http://localhost:3001/geojson';  // APIエンドポイント
+const DATA_URL = 'http://localhost:3001/geojson';
 const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/dark-matter-nolabels-gl-style/style.json';
 
 const ambientLight = new AmbientLight({ color: [255, 255, 255], intensity: 1.0 });
@@ -19,53 +17,31 @@ const dirLight = new SunLight({
     intensity: 1.0,
     _shadow: true
 });
-// 色のマップを定義する
+
 const colorMap = {
-    0: [0, 0, 255, 50],  // ラベル0の色
-    1: [255, 0, 0, 200],  // ラベル1の色
-    2: [255, 0, 0, 200],   // ラベル2の色
-    // 必要に応じて他のラベルに対しても色を追加
+    0: [0, 0, 255, 50],
+    1: [255, 0, 0, 200],
+    2: [255, 0, 0, 200]
 };
 
-function getTooltip({ object }: PickingInfo<Feature<Geometry, { info: string }>>) {
-    return (
-        object && {
-            html: `\
-    <div class="tooltip">
-      <div><b>Rel. Coord. (${object.properties.x_rel},${object.properties.y_rel})</b></div>
-      <div><b>Bldg. Label ${object.properties.label}</b></div>
-    </div>\
-  `
-        }
-    );
-}
-
 export default function App() {
-    const [initialViewState, setInitialViewState] = useState<MapViewState>({
+    const [initialViewState, setInitialViewState] = useState({
         latitude: 0,
         longitude: 0,
-        zoom: 13, // OrthographicViewのために調整
+        zoom: 13,
         maxZoom: 16,
-        pitch: 0, // 真上からの視点
+        pitch: 0,
         bearing: 0,
     });
 
     const [data, setData] = useState(null);
-    const [effects] = useState(() => {
-        const lightingEffect = new LightingEffect({ ambientLight, dirLight });
-        lightingEffect.shadowColor = [0, 0, 0, 0.5];
-        return [lightingEffect];
-    });
 
     useEffect(() => {
-        // データ取得用の関数
         const fetchData = () => {
             fetch(DATA_URL)
                 .then(response => response.json())
                 .then(geojson => {
-                    console.log("GeoJSON data:", geojson);
                     setData(geojson);
-
                     if (geojson.features && geojson.features.length > 0) {
                         const bbox = turf.bbox(geojson);
                         const center = turf.center(turf.bboxPolygon(bbox)).geometry.coordinates;
@@ -81,16 +57,10 @@ export default function App() {
                 .catch(error => console.error("Error fetching data:", error));
         };
 
-        // 初回ロード時のデータ取得
         fetchData();
-
-        // 10秒ごとにデータを再取得
         const interval = setInterval(fetchData, 100);
-
-        // クリーンアップ
         return () => clearInterval(interval);
     }, []);
-
 
     const layers = [
         new GeoJsonLayer({
@@ -102,28 +72,26 @@ export default function App() {
             extruded: true,
             wireframe: true,
             getElevation: f => 10,
-            getFillColor: f => {
-                const label = f.properties.label;
-                return colorMap[label] || [128, 128, 128, 100]; // デフォルトは灰色
-            },
+            getFillColor: f => colorMap[f.properties.label] || [128, 128, 128, 100],
             getLineColor: [255, 255, 255],
             pickable: true,
         })
     ];
 
     return (
-        <DeckGL
-            layers={layers}
-            effects={effects}
-            initialViewState={initialViewState}
-            controller={true}
-            getTooltip={getTooltip}
-        >
-            <Map reuseMaps mapStyle={MAP_STYLE} />
-        </DeckGL>
+        <div style={{ position: 'relative', width: '100%', height: '100vh' }}>
+            <DeckGL
+                layers={layers}
+                initialViewState={initialViewState}
+                controller={true}
+                style={{ position: 'absolute', top: '0', left: '0', width: '100%', height: '100%' }}
+            >
+                <Map reuseMaps mapStyle={MAP_STYLE} />
+            </DeckGL>
+        </div>
     );
 }
 
-export function renderToDOM(container: HTMLDivElement) {
+export function renderToDOM(container) {
     createRoot(container).render(<App />);
 }

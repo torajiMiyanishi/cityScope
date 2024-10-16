@@ -43,7 +43,10 @@ public class MapApp {
         INDUSTRY_TYPE_TO_POI_SPOTS = new HashMap<>();
         // 再定義
         for (TSpot poiSpot: spotManager.getSpots(SpotType.Poi)){
-            update(poiSpot);
+            RoleOfPoi poiRole = (RoleOfPoi)poiSpot.getRole(RoleName.Poi);
+            if (!poiRole.toBeDeleted()){ // 削除予定のスポットはMapAppで参照できないようにする．
+                update(poiSpot);
+            }
         }
     }
 

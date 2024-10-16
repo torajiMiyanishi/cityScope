@@ -94,12 +94,18 @@ public class RoleOfTripper extends TRole {
                 inTripTime.add(0, 1, 0); // 1step分ずつ増やす
             }
 
-            // tick内移動への対応
+            // 決定した移動行動の予約とtick内移動への対応
             if (fCurrentTime.isEqualTo(new TTime(fCurrentTime.getDay() + ti.getEndDay(), ti.getEndHour(), ti.getEndMinute(), 0))){ // 出発時刻と到達時刻が同じティック内の場合
                 deactivateRule.setTimeAndStage(fCurrentTime.getDay() + ti.getEndDay(), ti.getEndHour(), ti.getEndMinute(), 0, Stage.DeactivateWithCancel);//旅行計画が正常にスケジュールされた場合は，trip終了時刻に不活性化
             } else {
                 deactivateRule.setTimeAndStage(fCurrentTime.getDay() + ti.getEndDay(), ti.getEndHour(), ti.getEndMinute(), 0, Stage.Deactivate);//旅行計画が正常にスケジュールされた場合は，trip終了時刻に不活性化
             }
+            // 移動先が介入対象ならば，移動先に通知
+            if (SpotType.Poi == determinedDestination.getType()){
+                RoleOfPoi poiRole = (RoleOfPoi)determinedDestination.getRole(RoleName.Poi);
+                poiRole.addArrivingAgent((TAgent)getOwner());
+            }
+
         } else {
             if (ti == null) {
                 System.err.println("Failed to find any route. @RoleOfTripper");

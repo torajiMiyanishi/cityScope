@@ -496,7 +496,7 @@ public class Behavior {
     }
 
     /**
-     * Poiについての定義
+     * Poiのデータを型として定義
      */
     public static class PoiData{
         private String genreCode;
@@ -506,12 +506,19 @@ public class Behavior {
 
         private List<IndustryType> industryTypes = new ArrayList<>();
         private List<BehaviorType> behaviorTypes = new ArrayList<>();
+        private double latitude;
+        private double longitude;
+        private String gridCode;
 
-        public PoiData(String genreCode, String address, String industryRecord, String behaviorRecord, double area, int absAttractScore) {
+        public PoiData(String genreCode, String address, String industryRecord, String behaviorRecord, double area, int absAttractScore, double latitude, double longitude, String gridCode) {
             this.genreCode = genreCode;
             this.address = address;
             this.area = area;
             this.absAttractScore = absAttractScore;
+            this.latitude = latitude;
+            this.longitude = longitude;
+            this.gridCode = gridCode;
+
 
             if (industryRecord != null){
                 for (String industryType: industryRecord.split(",")){
@@ -540,16 +547,39 @@ public class Behavior {
         public List<BehaviorType> getBehaviorTypes() {
             return behaviorTypes;
         }
+        public String getGridCode() { return gridCode; }
+        public double getLatitude() { return latitude; }
+        public double getLongitude() { return longitude; }
 
+        // setter メソッド
+        public void setGridCode(String gridCode) {
+            this.gridCode = gridCode;
+        }
+        public void setLatitude(double latitude) {
+            this.latitude = latitude;
+        }
+        public void setLongitude(double longitude) {
+            this.longitude = longitude;
+        }
+
+
+
+        // toString メソッドの修正
         @Override
         public String toString() {
             return "PoiData{" +
                     "genreCode='" + genreCode + '\'' +
                     ", address='" + address + '\'' +
+                    ", area=" + area +
+                    ", absAttractScore=" + absAttractScore +
                     ", industryTypes=" + industryTypes +
                     ", behaviorTypes=" + behaviorTypes +
+                    ", gridCode='" + gridCode + '\'' +
+                    ", latitude=" + latitude +
+                    ", longitude=" + longitude +
                     '}';
         }
+
     }
 
 
