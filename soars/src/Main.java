@@ -1,4 +1,7 @@
 import java.io.*;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.*;
 import java.sql.*;
 
@@ -36,7 +39,9 @@ import org.opentripplanner.common.geometry.SphericalDistanceLibrary;
  * @author miyanishi
  */
 public class Main {
-
+    public static LocalDateTime StartDateTime = LocalDateTime.of(2024, 10, 16, 0, 0, 0);
+    // リアルタイム可視化
+    public final static String pathToCityData = "jdbc:sqlite:C:\\Users\\tora2\\IdeaProjects\\cityScope\\visual\\tangible_ui_04\\CityData.db";
 
     public static void main(String[] args) throws Exception {
         // *************************************************************************************************************
@@ -49,10 +54,10 @@ public class Main {
         //   - spotTypes:使用するスポットタイプ集合
         // *************************************************************************************************************
         long startTime = System.currentTimeMillis(); //実験開始時刻
-        String simulationStart  = "0/00:00:00";
-        String simulationEnd    = "1/0:00:00";
-        String tick                = "0:01:00";
-        String behaviorTick        = "0:15:00"; // 行為決定のティック
+        String simulationStart = "0/00:00:00";
+        String simulationEnd = "1/0:00:00";
+        String tick = "0:01:00";
+        String behaviorTick = "0:15:00"; // 行為決定のティック
         long seed = 10400L; // マスターシード値
         int noOfPeople = 100;
         List<Enum<?>> stages = List.of(Stage.FetchIntervention, EStage.AgentArriving, Stage.Deactivate, Stage.DecideBehavior, EStage.AgentPlanning, EStage.AgentDeparting, Stage.DeactivateWithCancel);
@@ -80,7 +85,7 @@ public class Main {
 
 //        String dirToInput = "C:\\Users\\tora2\\IdeaProjects\\LifeBehavior\\";
         String dirToInput = "C:\\Users\\tora2\\IdeaProjects\\cityScope\\data\\";
-        String pathOfPopulationDataFile = dirToInput + "pop\\spdata_"+noOfPeople+".csv"; //合成人口データファイル
+        String pathOfPopulationDataFile = dirToInput + "pop\\spdata_" + noOfPeople + ".csv"; //合成人口データファイル
         String pathToPoiCsv = dirToInput + "poi\\zenrin_building.csv"; //poiのcsv
         String pathToPoiSql = dirToInput + "database\\yokosuka_test.db"; // poiのdatabase
         String pathToPbf = dirToInput + "trans\\14100-road.osm.pbf"; //OpenStreetMap用のPBFファイル
@@ -89,13 +94,14 @@ public class Main {
         // ルールログとランタイムログの出力設定
         String pathOfLogCDir = "C:\\Users\\tora2\\IdeaProjects\\cityScope\\logs\\";
 //        String pathOfLogZDir = "Z:\\lab\\output\\logs\\";
-        String fileNameHead = "seed_"+ seed + "_no_" + noOfPeople + "_";
+        String fileNameHead = "seed_" + seed + "_no_" + noOfPeople + "_";
         builder.setRuleLoggingEnabled(pathOfLogCDir + File.separator + fileNameHead + "rule_log.csv");
         builder.setRuntimeLoggingEnabled(pathOfLogCDir + File.separator + fileNameHead + "runtime_log.csv");
         String personTripLog = fileNameHead + "person_trips"; //移動ログ
         String spotLog = fileNameHead + "spot_log.csv"; //スポットログ
         String behaviorLog = fileNameHead + "behavior_log.csv"; // 行為ログ
         String locationLog = fileNameHead + "location_log.csv"; // 位置情報（緯度経度）のログ
+
 
         // ルールログのデバッグ情報出力設定
         builder.setRuleDebugMode(ERuleDebugMode.LOCAL);
@@ -127,12 +133,12 @@ public class Main {
         //合成人口データの読み込み
         List<SyntheticPopulationData> spDatas = SyntheticPopulationData.raedDataFromCsvFile(pathOfPopulationDataFile);
         // household_idに基づいて自宅生成
-        HashMap<String,TSpot> householdIdToHome = new HashMap<>();
-        for (SyntheticPopulationData spData: spDatas){
+        HashMap<String, TSpot> householdIdToHome = new HashMap<>();
+        for (SyntheticPopulationData spData : spDatas) {
             String householdId = spData.getHouseholdId();
-            if (!householdIdToHome.containsKey(householdId)){
-                TSpot home = spotManager.createSpots(SpotType.Home,1,Layer.Geospatial).get(0);
-                householdIdToHome.put(householdId,home); // マスタに追加
+            if (!householdIdToHome.containsKey(householdId)) {
+                TSpot home = spotManager.createSpots(SpotType.Home, 1, Layer.Geospatial).get(0);
+                householdIdToHome.put(householdId, home); // マスタに追加
                 new TRoleOfGisSpot(home, spData.getLatitude(), spData.getLongitude(), String.valueOf(spData.getMeshcode()));
             }
         }
@@ -143,26 +149,26 @@ public class Main {
         TSpotOnTheWayMaker.create(spotManager, spotManager.getSpots(SpotType.Home), SpotType.SpotOnTheWay); //自宅スポットの途中スポット
 
         // testのためのスポット
-        TSpot testSpot = spotManager.createSpots(SpotType.Test,1,Layer.Test).get(0);
+        TSpot testSpot = spotManager.createSpots(SpotType.Test, 1, Layer.Test).get(0);
 
         //エージェントの生成
         int noOfPersons = spDatas.size(); // 合成人口データで定義された人数
         List<TAgent> persons = agentManager.createAgents(AgentType.Person, noOfPersons); // Personエージェントを生成
         for (int i = 0; i < persons.size(); ++i) {
             TAgent person = persons.get(i); // i番目のエージェントを取り出す．
-            if (i == 0){
+            if (i == 0) {
                 new RoleOfPlayer(person);
                 person.activateRole(RoleName.Player);
             }
             SyntheticPopulationData spData = spDatas.get(i); //i番目のエージェントの人工合成データ
-            new TRoleOfGisAgent(person,UUID.randomUUID().toString()); //GISエージェント役割を生成してエージェントに割り当てる
+            new TRoleOfGisAgent(person, UUID.randomUUID().toString()); //GISエージェント役割を生成してエージェントに割り当てる
             String householdId = spData.getHouseholdId(); //世帯ID
             TSpot home = householdIdToHome.get(householdId); // 自宅を取得
-            new RoleOfResident(person,home,spData); // 住民役割
+            new RoleOfResident(person, home, spData); // 住民役割
             person.activateRole(RoleName.Resident);
             person.initializeCurrentSpot(home); //初期位置を自宅スポットに設定する．
             person.initializeCurrentSpot(testSpot); // テスト用にtestレイヤのスポットを設定．
-            new RoleOfTripper(person,ruleExecutor.getCurrentTime()); // 動的な移動計画
+            new RoleOfTripper(person, ruleExecutor.getCurrentTime()); // 動的な移動計画
             person.activateRole(jp.soars.modules.gis_otp.role.ERoleName.GisAgent); //GISエージェント役割をアクティブ化
 
             /** gis-otp-moduleとマルコフ連鎖生活行動モデルの結合 */
@@ -176,9 +182,9 @@ public class Main {
         // *************************************************************************************************************
         // print writerを作り，カラムを出力
         PrintWriter behaviorLogPW = new PrintWriter(pathOfLogCDir + File.separator + behaviorLog);// 行為ログ用PrintWriter
-        writePivotColumns(behaviorLogPW,persons);
+        writePivotColumns(behaviorLogPW, persons);
         PrintWriter spotLogPW = new PrintWriter(pathOfLogCDir + File.separator + spotLog); // スポットログ
-        writePivotColumns(spotLogPW,persons);
+        writePivotColumns(spotLogPW, persons);
         PrintWriter locationPW = new PrintWriter(pathOfLogCDir + File.separator + locationLog); // 位置情報ログ
         writeLocationLogColumns(locationPW);
 
@@ -200,12 +206,13 @@ public class Main {
             //スポットログの出力
             writeSpotLog(spotLogPW, ruleExecutor.getCurrentTime(), persons);
             // 行為ログ出力
-            writeBehaviorLog(behaviorLogPW,ruleExecutor.getCurrentTime(),persons);
+            writeBehaviorLog(behaviorLogPW, ruleExecutor.getCurrentTime(), persons);
             // 位置情報ログ
 //            if (ruleExecutor.getCurrentTime().getMinute() == 0){ // 位置情報は一時間に一度書き出す．
 //                writeLocationLog(locationPW,ruleExecutor.getCurrentTime(),persons);
 //            }
-            writeLocationLog(locationPW,ruleExecutor.getCurrentTime(),persons);
+            writeLocationLog(locationPW, ruleExecutor.getCurrentTime(), persons);
+            writeLocationLogToSql(ruleExecutor.getCurrentTime(), persons);
 
         }
 
@@ -225,11 +232,12 @@ public class Main {
 
     /**
      * SOARSビルダを生成する．
+     *
      * @param startTime シミュレーション開始時刻
-     * @param endTime シミュレーション終了時刻
-     * @param tick １ステップの時間間隔
-     * @param stages ステージリスト
-     * @param seed マスター乱数シード
+     * @param endTime   シミュレーション終了時刻
+     * @param tick      １ステップの時間間隔
+     * @param stages    ステージリスト
+     * @param seed      マスター乱数シード
      * @return SOARSビルダ
      * @throws IOException
      */
@@ -239,7 +247,7 @@ public class Main {
         Set<Enum<?>> spotTypes = new HashSet<>(); // 全スポットタイプ
         Collections.addAll(agentTypes, AgentType.values()); // EAgentType に登録されているエージェントタイプをすべて追加
         Collections.addAll(spotTypes, SpotType.values()); // ESpotType に登録されているスポットタイプをすべて追加
-        TSOARSBuilder builder = new TSOARSBuilder(startTime, endTime, tick, stages, agentTypes, spotTypes,layers,defaultLayer); // ビルダー作成
+        TSOARSBuilder builder = new TSOARSBuilder(startTime, endTime, tick, stages, agentTypes, spotTypes, layers, defaultLayer); // ビルダー作成
         builder.setRandomSeed(seed); // シード値設定
         // builder.setRuleLoggingEnabled(pathOfLogDir + File.separator + "rule_log.csv") // ルールログ出力設定
         //        .setRuntimeLoggingEnabled(pathOfLogDir + File.separator + "runtime_log.csv"); // ランタイムログ出力設定
@@ -249,31 +257,33 @@ public class Main {
     }
 
 
-
     /**
      * スポットログを出力する．
-     * @param pw 出力ストリーム
+     *
+     * @param pw          出力ストリーム
      * @param currentTime 現在時刻
-     * @param persons エージェントのリスト
+     * @param persons     エージェントのリスト
      */
     private static void writeSpotLog(PrintWriter pw, TTime currentTime, List<TAgent> persons) {
         pw.print(currentTime); // 現在時刻
-        pw.print(","+Day.getDay(currentTime.getDay()));
+        pw.print("," + Day.getDay(currentTime.getDay()));
         for (TAgent person : persons) {
             pw.print("," + person.getCurrentSpotName());
         }
         pw.println();
         pw.flush();
     }
+
     /**
      * 行為ログを出力する
-     * @param pw 出力ストリーム
+     *
+     * @param pw          出力ストリーム
      * @param currentTime 現在時刻
-     * @param persons エージェントのリスト
+     * @param persons     エージェントのリスト
      */
     private static void writeBehaviorLog(PrintWriter pw, TTime currentTime, List<TAgent> persons) {
         pw.print(currentTime); // 現在時刻
-        pw.print(","+Day.getDay(currentTime.getDay()));
+        pw.print("," + Day.getDay(currentTime.getDay()));
         for (TAgent person : persons) {
             RoleOfBehavior behaviorRole = (RoleOfBehavior) person.getRole(RoleName.Behavior);
             pw.print("," + behaviorRole.getCurrentBehavior());
@@ -284,10 +294,11 @@ public class Main {
 
     /**
      * エージェント分の横持ちカラムを記述する
+     *
      * @param logPW
      * @param persons
      */
-    private static void writePivotColumns(PrintWriter logPW, List<TAgent> persons){
+    private static void writePivotColumns(PrintWriter logPW, List<TAgent> persons) {
         logPW.print("CurrentTime,CurrentDay");
         for (TAgent person : persons) {
             logPW.print(',');
@@ -298,6 +309,7 @@ public class Main {
 
     /**
      * 緯度経度ログのカラム定義
+     *
      * @param pw print writer
      * @throws FileNotFoundException
      */
@@ -309,14 +321,15 @@ public class Main {
 
     /**
      * 緯度経度ログの出力
-     * @param pw 出力ストリーム
+     *
+     * @param pw          出力ストリーム
      * @param currentTime 現在時刻
-     * @param persons エージェントのリスト
+     * @param persons     エージェントのリスト
      */
     private static void writeLocationLog(PrintWriter pw, TTime currentTime, List<TAgent> persons) {
         // ※参考 カラム >> PersonId,Gender,Age,Day,CurrentTime,NttTime,Latitude,Longitude
         // 時刻を変換
-        String HHMM = Day.formatTime(currentTime.getHour(),currentTime.getMinute());
+        String HHMM = Day.formatTime(currentTime.getHour(), currentTime.getMinute());
         Day.DayType day = Day.getDay(currentTime.getDay());
 
 
@@ -324,7 +337,7 @@ public class Main {
             // LatLon
             Double[] latlon = new Double[2];
             TSpot currentSpot = person.getCurrentSpot();
-            if (currentSpot.getType() == SpotType.SpotOnTheWay){ // 途中スポットの場合
+            if (currentSpot.getType() == SpotType.SpotOnTheWay) { // 途中スポットの場合
                 RoleOfTripper tripperRole = (RoleOfTripper) person.getRole(RoleName.Tripper);
                 latlon = tripperRole.getCurrentLatLon();
 
@@ -334,7 +347,7 @@ public class Main {
                 }
             } else if (currentSpot.getType() == SpotType.Home || currentSpot.getType() == SpotType.Poi) { // 地理空間上のスポットの場合
                 TRoleOfGisSpot gisSpotRole = (TRoleOfGisSpot) currentSpot.getRole(jp.soars.modules.gis_otp.role.ERoleName.GisSpot);
-                latlon = new Double[] {gisSpotRole.getLatitude(),gisSpotRole.getLongitude()};
+                latlon = new Double[]{gisSpotRole.getLatitude(), gisSpotRole.getLongitude()};
             }
             if (latlon == null || latlon[0] == null || latlon[1] == null) {
                 System.out.println(currentSpot);
@@ -345,7 +358,7 @@ public class Main {
                 pw.print(person.getName());
                 // Gender
                 RoleOfResident residentRole = (RoleOfResident) person.getRole(RoleName.Resident);
-                Behavior.Gender gender = (residentRole.getSyntheticPopulationData().getSexId().equals(0)) ? Behavior.Gender.MALE: Behavior.Gender.FEMALE;
+                Behavior.Gender gender = (residentRole.getSyntheticPopulationData().getSexId().equals(0)) ? Behavior.Gender.MALE : Behavior.Gender.FEMALE;
                 pw.print("," + gender);
                 // Age
                 pw.print("," + residentRole.getSyntheticPopulationData().getAge());
@@ -362,5 +375,70 @@ public class Main {
             }
         }
         pw.flush();
+    }
+
+
+    /**
+     * 緯度経度ログをsqlに出力
+     * @param currentTime 現在時刻
+     * @param persons     エージェントのリスト
+     */
+    private static void writeLocationLogToSql(TTime currentTime, List<TAgent> persons) {
+        // クエリ
+        String insertSQL = "INSERT INTO agent_locations (timestamp, person_name, gender, age, latitude, longitude) VALUES (?, ?, ?, ?, ?, ?)";
+
+        try (Connection conn = DriverManager.getConnection(pathToCityData);
+             PreparedStatement pstmt = conn.prepareStatement(insertSQL)) {
+
+            // ※参考 カラム >> timestamp,person_name,gender,age,latitude,longitude
+            // 時刻を変換してUNIXのタイムスタンプを作成
+            LocalDateTime currentDateTime = LocalDateTime.of(
+                    StartDateTime.getYear(),
+                    StartDateTime.getMonthValue(),
+                    StartDateTime.getDayOfMonth() + currentTime.getDay(),
+                    currentTime.getHour(),
+                    currentTime.getMinute(),
+                    currentTime.getSecond());
+            ZonedDateTime jstDateTime = currentDateTime.atZone(ZoneId.of("Asia/Tokyo"));
+            long timestamp = jstDateTime.toInstant().toEpochMilli();
+
+            for (TAgent person : persons) { // 各エージェントから残りの情報を取得
+                // LatLon
+                Double[] latlon = new Double[2];
+                TSpot currentSpot = person.getCurrentSpot();
+                if (currentSpot.getType() == SpotType.SpotOnTheWay) { // 途中スポットの場合
+                    RoleOfTripper tripperRole = (RoleOfTripper) person.getRole(RoleName.Tripper);
+                    latlon = tripperRole.getCurrentLatLon();
+
+                    if (latlon == null || latlon[0] == null || latlon[1] == null) {
+                        System.err.println("Cannot find current Latitude, Longitude FROM SpotOnTheWay @Main");
+//                    System.exit(1);
+                    }
+                } else if (currentSpot.getType() == SpotType.Home || currentSpot.getType() == SpotType.Poi) { // 地理空間上のスポットの場合
+                    TRoleOfGisSpot gisSpotRole = (TRoleOfGisSpot) currentSpot.getRole(jp.soars.modules.gis_otp.role.ERoleName.GisSpot);
+                    latlon = new Double[]{gisSpotRole.getLatitude(), gisSpotRole.getLongitude()};
+                }
+                if (latlon == null || latlon[0] == null || latlon[1] == null) {
+                    System.out.println(currentSpot);
+                    System.err.println("Cannot find current Latitude, Longitude @Main");
+//                System.exit(1);
+                } else {
+                    RoleOfResident residentRole = (RoleOfResident) person.getRole(RoleName.Resident);
+                    Behavior.Gender gender = (residentRole.getSyntheticPopulationData().getSexId().equals(0)) ? Behavior.Gender.MALE : Behavior.Gender.FEMALE;
+
+                    // プレースホルダーに値をセット
+                    pstmt.setLong(1, timestamp);
+                    pstmt.setString(2, person.getName());
+                    pstmt.setString(3, gender.toString());
+                    pstmt.setInt(4, residentRole.getSyntheticPopulationData().getAge());
+                    pstmt.setDouble(5, latlon[0]);
+                    pstmt.setDouble(6, latlon[1]);
+                    // データを挿入
+                    pstmt.executeUpdate();
+                }
+            }
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
     }
 }
