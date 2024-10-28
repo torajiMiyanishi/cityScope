@@ -72,7 +72,7 @@ export default function App() {
 
         // クリーンアップ
         return () => clearInterval(fetchInterval);
-    }, [colorPattern]);
+    });
 
     useEffect(() => {
         const animateInterval = setInterval(() => {
@@ -81,7 +81,7 @@ export default function App() {
             } else {
                 setCurrentTimestamp(t => t + 60 * 1000);
             }
-        },10);
+        },100);
         // クリーンアップ
         return () => clearInterval(animateInterval);
     });
